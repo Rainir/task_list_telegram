@@ -1,6 +1,7 @@
 package ru.rainir.task_list_telegram.Service;
 
-import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication;
@@ -11,29 +12,27 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
-import ru.rainir.task_list_telegram.Command.TaskCommand.InlineKeyboardHelper;
-import ru.rainir.task_list_telegram.Command.UserCommand.StartCommand;
 import ru.rainir.task_list_telegram.Model.Telegram;
 
+import static ru.rainir.task_list_telegram.Command.TaskCommand.InlineKeyboardHelper.createTaskDetailsMessage;
+import static ru.rainir.task_list_telegram.Command.UserCommand.StartCommand.registrationStartMassage;
+import static ru.rainir.task_list_telegram.Command.UserCommand.StartCommandHandler.callbackHandler;
+
 @Service
-public class TelegramService implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
+public class TelegramService extends TelegramBotsLongPollingApplication implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
 
+    private static final Logger log = LoggerFactory.getLogger(TelegramService.class);
     private final Telegram telegram;
-    private final TelegramClient telegramClient;
+    private TelegramClient telegramClient;
 
-    public TelegramService(Telegram telegram, OkHttpTelegramClient getTelegramHttpClient) {
+    public TelegramService(Telegram telegram) {
         this.telegram = telegram;
-        this.telegramClient = getTelegramHttpClient;
+        initTelegramClient();
     }
 
-    @PostConstruct
-    public void botStarted() {
-        try (TelegramBotsLongPollingApplication botApplication = new TelegramBotsLongPollingApplication()) {
-            botApplication.registerBot(telegram.getBOT_TOKEN(), this);
-            System.out.println("Bot started");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    private void initTelegramClient() {
+        telegramClient = new OkHttpTelegramClient(telegram.getBOT_TOKEN());
+        log.info("Бот запущен и работает!");
     }
 
     @Override
@@ -49,24 +48,45 @@ public class TelegramService implements SpringLongPollingBot, LongPollingSingleT
     @Override
     public void consume(Update update) {
 
-
-        System.out.println(update.getMessage().getChatId() + ": " + update.getMessage().getText());
-
+        if (update.hasCallbackQuery()) {
+            System.out.println(update.getCallbackQuery().getFrom().getId() + ": " + update.getCallbackQuery().getData());
+        }
         if (update.hasMessage() && update.getMessage().hasText()) {
-            String text = update.getMessage().getText();
-            long chat_id = update.getMessage().getChatId();
+            System.out.println(update.getMessage().getChatId() + ": " + update.getMessage().getText());
+        }
 
-            SendMessage message = switch (text) {
-                case "/start" -> StartCommand.registrationStartMassage(chat_id);
-                case "/task" -> InlineKeyboardHelper.createTaskDetailsMessage(chat_id);
-                default -> null;
-            };
+        SendMessage message = consumeHandler(update);
 
+        if (message != null) {
             try {
-                    telegramClient.execute(message);
-                } catch (TelegramApiException e) {
-                    throw new RuntimeException(e);
-                }
+                telegramClient.execute(message);
+            } catch (TelegramApiException e) {
+                log.error("Ошибка при отправке сообщения: {}", e.getMessage());
+                throw new RuntimeException(e);
             }
         }
+    }
+
+    private SendMessage consumeHandler(Update update) {
+        Long chat_id;
+
+        if (update.hasCallbackQuery()) {
+            chat_id = update.getCallbackQuery().getFrom().getId();
+            return callbackHandler(chat_id, update.getCallbackQuery().getData());
+        }
+
+        if (update.hasMessage() && update.getMessage().hasText()) {
+            if (update.getMessage().getText().startsWith("/")) {
+                return switch (update.getMessage().getText()) {
+                    case "/start" -> registrationStartMassage(update.getMessage().getChatId());
+                    case "/task" -> createTaskDetailsMessage(update.getMessage().getChatId());
+                    default -> null;
+                };
+            } else {
+                return new SendMessage(String.valueOf(
+                        update.getMessage().getChatId()), update.getMessage().getText());
+            }
+        }
+        return null;
+    }
 }

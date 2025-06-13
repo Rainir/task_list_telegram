@@ -13,7 +13,7 @@ public class InlineKeyboardHelper {
 
     private static final Task task = new Task();
 
-    public static SendMessage createTaskDetailsMessage(long chatId) {
+    public static SendMessage createTaskDetailsMessage(Long chatId) {
 
 
         String messageText = "Описание таска:\n" + task;
@@ -49,7 +49,7 @@ public class InlineKeyboardHelper {
     private static InlineKeyboardButton createChangeNameButton() {
         return InlineKeyboardButton.builder()
                 .text("Изменить название")
-                .callbackData("change_name") // Используйте уникальные callback data
+                .callbackData("change_name")
                 .build();
     }
 
