@@ -12,11 +12,11 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
+import ru.rainir.task_list_telegram.Command.GlobalHandler;
 import ru.rainir.task_list_telegram.Model.Telegram;
 
-import static ru.rainir.task_list_telegram.Command.TaskCommand.InlineKeyboardHelper.createTaskDetailsMessage;
-import static ru.rainir.task_list_telegram.Command.UserCommand.StartCommand.registrationStartMassage;
-import static ru.rainir.task_list_telegram.Command.UserCommand.StartCommandHandler.callbackHandler;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TelegramService extends TelegramBotsLongPollingApplication implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
@@ -24,9 +24,17 @@ public class TelegramService extends TelegramBotsLongPollingApplication implemen
     private static final Logger log = LoggerFactory.getLogger(TelegramService.class);
     private final Telegram telegram;
     private TelegramClient telegramClient;
+    private final TaskApiService taskApiService;
+    private final TelegramApiService telegramApiService;
+    private final GlobalHandler globalHandler;
 
-    public TelegramService(Telegram telegram) {
+    private final Map<Long, TaskConversation> conversations = new ConcurrentHashMap<>();
+
+    public TelegramService(Telegram telegram, TaskApiService taskApiService, TelegramApiService telegramApiService, GlobalHandler globalHandler) {
         this.telegram = telegram;
+        this.taskApiService = taskApiService;
+        this.telegramApiService = telegramApiService;
+        this.globalHandler = globalHandler;
         initTelegramClient();
     }
 
@@ -47,46 +55,46 @@ public class TelegramService extends TelegramBotsLongPollingApplication implemen
 
     @Override
     public void consume(Update update) {
-
+        SendMessage message;
+        Long chatId = null;
         if (update.hasCallbackQuery()) {
-            System.out.println(update.getCallbackQuery().getFrom().getId() + ": " + update.getCallbackQuery().getData());
+            chatId = update.getCallbackQuery().getFrom().getId();
+            System.out.println(update.getCallbackQuery().getFrom().getId() + ": " + update.getCallbackQuery().getData() + " callback");
         }
         if (update.hasMessage() && update.getMessage().hasText()) {
-            System.out.println(update.getMessage().getChatId() + ": " + update.getMessage().getText());
+            chatId = update.getMessage().getChatId();
+            System.out.println(chatId + ": " + update.getMessage().getText());
         }
 
-        SendMessage message = consumeHandler(update);
+        message = consumeHandler(update, chatId);
 
-        if (message != null) {
-            try {
-                telegramClient.execute(message);
-            } catch (TelegramApiException e) {
-                log.error("Ошибка при отправке сообщения: {}", e.getMessage());
-                throw new RuntimeException(e);
-            }
+        try {
+            telegramClient.execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Ошибка при отправке сообщения: {}", e.getMessage());
+            throw new RuntimeException(e);
         }
     }
 
-    private SendMessage consumeHandler(Update update) {
-        Long chat_id;
+    private SendMessage consumeHandler(Update update, Long chatId) {
 
-        if (update.hasCallbackQuery()) {
-            chat_id = update.getCallbackQuery().getFrom().getId();
-            return callbackHandler(chat_id, update.getCallbackQuery().getData());
+        TaskConversation conversation = conversations.getOrDefault(chatId, null);
+
+        if (update.hasMessage() && update.getMessage().getText().equals("/task_create") && conversation == null) {
+            conversation = new TaskConversation();
+            conversations.put(chatId, conversation);
+            conversation.startConversation(chatId);
+            return new SendMessage(chatId.toString(), "Введите название задачи:");
+        } else if (conversation != null && conversation.conversationActive) {
+            return conversation.processMessage(update.getMessage().getText(), taskApiService, telegramApiService.getUserIdByTelegramId(chatId));
         }
 
-        if (update.hasMessage() && update.getMessage().hasText()) {
-            if (update.getMessage().getText().startsWith("/")) {
-                return switch (update.getMessage().getText()) {
-                    case "/start" -> registrationStartMassage(update.getMessage().getChatId());
-                    case "/task" -> createTaskDetailsMessage(update.getMessage().getChatId());
-                    default -> null;
-                };
-            } else {
-                return new SendMessage(String.valueOf(
-                        update.getMessage().getChatId()), update.getMessage().getText());
-            }
+        if (telegramApiService.checkTelegramUserRegistration(chatId) ||
+                (update.hasMessage() && (update.getMessage().getText().equals("/start") || update.getMessage().getText().startsWith("/register"))) ||
+                (update.hasCallbackQuery() && update.getCallbackQuery().getData().startsWith("callbackUser_registration"))) {
+            return globalHandler.handler(update, telegramApiService, taskApiService);
+        } else {
+            return new SendMessage(chatId.toString(), "Похоже вы пользуетесь ботом впервые, введите команду  '/start'  чтобы продолжить");
         }
-        return null;
     }
 }

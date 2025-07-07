@@ -26,11 +26,12 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
-    implementation 'org.telegram:telegrambots-springboot-longpolling-starter:8.3.0'
-    implementation 'org.telegram:telegrambots-client:8.3.0'
-    implementation 'org.telegram:telegrambots-extensions:8.3.0'
-    implementation 'org.telegram:telegrambots-meta:8.3.0'
+    implementation 'org.telegram:telegrambots-springboot-longpolling-starter:9.0.0'
+    implementation 'org.telegram:telegrambots-client:9.0.0'
+    implementation 'org.telegram:telegrambots-extensions:9.0.0'
+    implementation 'org.telegram:telegrambots-meta:9.0.0'
 
 
     compileOnly 'org.projectlombok:lombok'

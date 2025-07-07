@@ -21,6 +21,10 @@ public class InlineKeyboardCreation {
         return new InlineKeyboardRow(inlineKeyboardButtons);
     }
 
+    public static InlineKeyboardRow createInlineKeyboardRow(List<InlineKeyboardButton> buttonList) {
+        return new InlineKeyboardRow(buttonList);
+    }
+
     public static List<InlineKeyboardRow>  createInlineKeyboardRows(InlineKeyboardRow... inlineKeyboardRows) {
         return new ArrayList<>(Arrays.asList(inlineKeyboardRows));
     }
@@ -28,5 +32,4 @@ public class InlineKeyboardCreation {
     public static InlineKeyboardMarkup createInlineKeyboardMarkup(List<InlineKeyboardRow> inlineKeyboardRows) {
         return  new InlineKeyboardMarkup(inlineKeyboardRows);
     }
-
 }
